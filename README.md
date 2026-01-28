@@ -14,7 +14,32 @@
 
 #### 预编译二进制
 
-从 [Releases](https://github.com/wy51ai/moltbotCNAPP/releases) 下载对应平台的文件。
+**Linux (amd64)**
+```bash
+curl -sLO https://github.com/wy51ai/moltbotCNAPP/releases/latest/download/clawdbot-bridge-linux-amd64 && mv clawdbot-bridge-linux-amd64 clawdbot-bridge && chmod +x clawdbot-bridge
+```
+
+**Linux (arm64)**
+```bash
+curl -sLO https://github.com/wy51ai/moltbotCNAPP/releases/latest/download/clawdbot-bridge-linux-arm64 && mv clawdbot-bridge-linux-arm64 clawdbot-bridge && chmod +x clawdbot-bridge
+```
+
+**macOS (arm64 / Apple Silicon)**
+```bash
+curl -sLO https://github.com/wy51ai/moltbotCNAPP/releases/latest/download/clawdbot-bridge-darwin-arm64 && mv clawdbot-bridge-darwin-arm64 clawdbot-bridge && chmod +x clawdbot-bridge
+```
+
+**macOS (amd64 / Intel)**
+```bash
+curl -sLO https://github.com/wy51ai/moltbotCNAPP/releases/latest/download/clawdbot-bridge-darwin-amd64 && mv clawdbot-bridge-darwin-amd64 clawdbot-bridge && chmod +x clawdbot-bridge
+```
+
+**Windows (amd64)**
+```powershell
+Invoke-WebRequest -Uri https://github.com/wy51ai/moltbotCNAPP/releases/latest/download/clawdbot-bridge-windows-amd64.exe -OutFile clawdbot-bridge.exe
+```
+
+也可以直接从 [Releases](https://github.com/wy51ai/moltbotCNAPP/releases) 页面手动下载。
 
 #### 从源码编译
 
