@@ -150,7 +150,7 @@ func (b *Bridge) processMessage(chatID, text string) {
 
 	// Ask ClawdBot
 	sessionKey := fmt.Sprintf("feishu:%s", chatID)
-	reply, err := b.clawdbotClient.AskClawdbot(text, sessionKey)
+	reply, err := b.clawdbotClient.AskClawdbot(text, sessionKey, nil)
 
 	// Mark as done
 	mu.Lock()
