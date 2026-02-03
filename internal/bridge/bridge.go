@@ -156,8 +156,10 @@ func (b *Bridge) processMessage(chatID, text string) {
 		// Default to feishu:chatID if not configured
 		sessionKey = fmt.Sprintf("feishu:%s", chatID)
 	}
+	log.Printf("[Bridge] sessionKey: %s", sessionKey)
 	reply, err := b.clawdbotClient.AskClawdbot(text, sessionKey, nil)
-
+	log.Printf("[Bridge] reply: %s", reply)
+	
 	// Mark as done
 	mu.Lock()
 	done = true
