@@ -25,6 +25,7 @@ type ClawdbotConfig struct {
 	GatewayPort  int
 	GatewayToken string
 	AgentID      string
+	SessionKey   string
 }
 
 // clawdbotJSON matches ~/.clawdbot/clawdbot.json (managed by ClawdBot)
@@ -45,6 +46,7 @@ type bridgeJSON struct {
 	} `json:"feishu"`
 	ThinkingThresholdMs *int   `json:"thinking_threshold_ms,omitempty"`
 	AgentID             string `json:"agent_id"`
+	SessionKey          string `json:"session_key"`
 }
 
 // Dir returns the config directory path
@@ -143,6 +145,7 @@ func Load() (*Config, error) {
 			GatewayPort:  gwCfg.Gateway.Port,
 			GatewayToken: gwCfg.Gateway.Auth.Token,
 			AgentID:      "main",
+			SessionKey:   "",
 		},
 	}
 
@@ -151,6 +154,9 @@ func Load() (*Config, error) {
 	}
 	if brCfg.AgentID != "" {
 		cfg.Clawdbot.AgentID = brCfg.AgentID
+	}
+	if brCfg.SessionKey != "" {
+		cfg.Clawdbot.SessionKey = brCfg.SessionKey
 	}
 	if cfg.Clawdbot.GatewayPort == 0 {
 		cfg.Clawdbot.GatewayPort = 18789

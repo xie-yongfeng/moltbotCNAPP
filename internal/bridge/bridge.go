@@ -17,6 +17,7 @@ type Bridge struct {
 	feishuClient   *feishu.Client
 	clawdbotClient *clawdbot.Client
 	thinkingMs     int
+	sessionKey     string
 	seenMessages   *messageCache
 }
 
@@ -71,11 +72,12 @@ func (mc *messageCache) cleanup() {
 }
 
 // NewBridge creates a new bridge
-func NewBridge(feishuClient *feishu.Client, clawdbotClient *clawdbot.Client, thinkingMs int) *Bridge {
+func NewBridge(feishuClient *feishu.Client, clawdbotClient *clawdbot.Client, thinkingMs int, sessionKey string) *Bridge {
 	return &Bridge{
 		feishuClient:   feishuClient,
 		clawdbotClient: clawdbotClient,
 		thinkingMs:     thinkingMs,
+		sessionKey:     sessionKey,
 		seenMessages:   newMessageCache(10 * time.Minute),
 	}
 }
@@ -149,7 +151,11 @@ func (b *Bridge) processMessage(chatID, text string) {
 	}
 
 	// Ask ClawdBot
-	sessionKey := fmt.Sprintf("feishu:%s", chatID)
+	sessionKey := b.sessionKey
+	if sessionKey == "" {
+		// Default to feishu:chatID if not configured
+		sessionKey = fmt.Sprintf("feishu:%s", chatID)
+	}
 	reply, err := b.clawdbotClient.AskClawdbot(text, sessionKey, nil)
 
 	// Mark as done

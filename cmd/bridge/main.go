@@ -183,7 +183,7 @@ func cmdRun() {
 		cfg.Clawdbot.AgentID,
 	)
 
-	bridgeInstance := bridge.NewBridge(nil, clawdbotClient, cfg.Feishu.ThinkingThresholdMs)
+	bridgeInstance := bridge.NewBridge(nil, clawdbotClient, cfg.Feishu.ThinkingThresholdMs, cfg.Clawdbot.SessionKey)
 
 	feishuClient := feishu.NewClient(
 		cfg.Feishu.AppID,
@@ -266,6 +266,9 @@ func applyConfigArgs(args []string) {
 	}
 	if v, ok := kv["agent_id"]; ok {
 		cfg.AgentID = v
+	}
+	if v, ok := kv["session_key"]; ok {
+		cfg.SessionKey = v
 	}
 	if v, ok := kv["thinking_ms"]; ok {
 		if ms, err := strconv.Atoi(v); err == nil {
