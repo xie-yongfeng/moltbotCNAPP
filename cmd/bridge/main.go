@@ -291,6 +291,7 @@ type bridgeConfigJSON struct {
 	} `json:"feishu"`
 	ThinkingThresholdMs int    `json:"thinking_threshold_ms,omitempty"`
 	AgentID             string `json:"agent_id,omitempty"`
+	SessionKey          string `json:"session_key,omitempty"`
 }
 
 func parseKeyValue(args []string) map[string]string {
