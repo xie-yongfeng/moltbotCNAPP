@@ -174,14 +174,14 @@ func cmdRun() {
 		log.Fatalf("[Main] Failed to load config: %v", err)
 	}
 
-	log.Printf("[Main] Loaded config: AppID=%s, Gateway=127.0.0.1:%d, AgentID=%s",
-		cfg.Feishu.AppID, cfg.Clawdbot.GatewayPort, cfg.Clawdbot.AgentID)
+	log.Printf("[Main] Loaded config: AppID=%s, Gateway=127.0.0.1:%d, AgentID=%s", "SessionKey=%s",
+		cfg.Feishu.AppID, cfg.Clawdbot.GatewayPort, cfg.Clawdbot.AgentID, cfg.Clawdbot.SessionKey)
 
 	clawdbotClient := clawdbot.NewClient(
 		cfg.Clawdbot.GatewayPort,
 		cfg.Clawdbot.GatewayToken,
 		cfg.Clawdbot.AgentID,
-	)
+			)
 
 	bridgeInstance := bridge.NewBridge(nil, clawdbotClient, cfg.Feishu.ThinkingThresholdMs, cfg.Clawdbot.SessionKey)
 

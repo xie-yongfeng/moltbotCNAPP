@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"regexp"
@@ -127,8 +128,14 @@ func (b *Bridge) HandleMessage(msg *feishu.Message) error {
 
 func (b *Bridge) processMessage(chatID, text string) {
 	var placeholderID string
+	var responseMessageID string
 	var done bool
+	var thinkingDots int
 	var mu sync.Mutex
+
+	// Dynamic thinking animation ticker
+	var thinkingTicker *time.Ticker
+	var thinkingStop chan bool
 
 	// Show "thinking..." if response takes too long
 	var timer *time.Timer
@@ -141,28 +148,151 @@ func (b *Bridge) processMessage(chatID, text string) {
 				return
 			}
 
-			msgID, err := b.feishuClient.SendMessage(chatID, "正在思考…")
+			// Send initial thinking message
+			msgID, err := b.feishuClient.SendMessage(chatID, "正在思考.")
 			if err != nil {
 				log.Printf("[Bridge] Failed to send thinking message: %v", err)
 				return
 			}
 			placeholderID = msgID
+			thinkingDots = 1
+
+			// Start thinking animation
+			thinkingStop = make(chan bool)
+			thinkingTicker = time.NewTicker(500 * time.Millisecond)
+			go func() {
+				for {
+					select {
+					case <-thinkingTicker.C:
+						mu.Lock()
+						if done || placeholderID == "" {
+							mu.Unlock()
+							return
+						}
+						
+						// Cycle through 1, 2, 3 dots
+						thinkingDots = (thinkingDots % 3) + 1
+						dots := strings.Repeat(".", thinkingDots)
+						thinkingText := "正在思考" + dots
+						
+						if err := b.feishuClient.UpdateMessage(placeholderID, thinkingText); err != nil {
+							log.Printf("[Bridge] Failed to update thinking animation: %v", err)
+						}
+						mu.Unlock()
+					case <-thinkingStop:
+						return
+					}
+				}
+			}()
 		})
 	}
 
-	// Ask ClawdBot
+	// Stream buffer for accumulating response
+	var streamBuffer strings.Builder
+	var lastUpdateTime time.Time
+	updateInterval := 300 * time.Millisecond // Update every 300ms
+
+	// Progress callback for streaming
+	onProgress := func(stream, data string) {
+		if stream != "assistant" {
+			return
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+
+		if done {
+			return
+		}
+
+		// Parse stream data
+		var streamData struct {
+			Text  string `json:"text,omitempty"`
+			Delta string `json:"delta,omitempty"`
+		}
+		if err := json.Unmarshal([]byte(data), &streamData); err != nil {
+			log.Printf("[Bridge] Failed to parse stream data: %v", err)
+			return
+		}
+
+		// Accumulate text or delta
+		if streamData.Text != "" {
+			streamBuffer.Reset()
+			streamBuffer.WriteString(streamData.Text)
+		} else if streamData.Delta != "" {
+			streamBuffer.WriteString(streamData.Delta)
+		} else {
+			return // No text or delta, skip
+		}
+
+		currentText := streamBuffer.String()
+		if currentText == "" {
+			return
+		}
+
+		// First chunk - delete thinking message and create response message
+		if responseMessageID == "" {
+			// Stop thinking animation
+			if thinkingTicker != nil {
+				thinkingTicker.Stop()
+				if thinkingStop != nil {
+					close(thinkingStop)
+				}
+			}
+
+			// Delete thinking placeholder
+			if placeholderID != "" {
+				if err := b.feishuClient.DeleteMessage(placeholderID); err != nil {
+					log.Printf("[Bridge] Failed to delete thinking placeholder: %v", err)
+				}
+				placeholderID = ""
+			}
+
+			// Create new response message with first chunk
+			msgID, err := b.feishuClient.SendMessage(chatID, currentText)
+			if err != nil {
+				log.Printf("[Bridge] Failed to create response message: %v", err)
+				return
+			}
+			responseMessageID = msgID
+			lastUpdateTime = time.Now()
+			return
+		}
+
+		// Throttle updates to avoid rate limiting
+		if time.Since(lastUpdateTime) < updateInterval {
+			return
+		}
+
+		// Update existing message with accumulated content
+		if err := b.feishuClient.UpdateMessage(responseMessageID, currentText); err != nil {
+			log.Printf("[Bridge] Failed to update streaming message: %v", err)
+		} else {
+			lastUpdateTime = time.Now()
+		}
+	}
+
+	// Ask ClawdBot with streaming
 	sessionKey := b.sessionKey
 	if sessionKey == "" {
-		// Default to feishu:chatID if not configured
 		sessionKey = fmt.Sprintf("feishu:%s", chatID)
 	}
 	log.Printf("[Bridge] sessionKey: %s", sessionKey)
-	reply, err := b.clawdbotClient.AskClawdbot(text, sessionKey, nil)
+	
+	reply, err := b.clawdbotClient.AskClawdbot(text, sessionKey, onProgress)
 	log.Printf("[Bridge] reply: %s", reply)
 	
 	// Mark as done
 	mu.Lock()
 	done = true
+	
+	// Stop thinking animation
+	if thinkingTicker != nil {
+		thinkingTicker.Stop()
+		if thinkingStop != nil {
+			close(thinkingStop)
+		}
+	}
 	mu.Unlock()
 
 	if timer != nil {
@@ -182,33 +312,48 @@ func (b *Bridge) processMessage(chatID, text string) {
 	if reply == "" || reply == "NO_REPLY" {
 		log.Printf("[Bridge] Received NO_REPLY, not sending message")
 
+		mu.Lock()
 		// Delete thinking placeholder if it exists
 		if placeholderID != "" {
 			if err := b.feishuClient.DeleteMessage(placeholderID); err != nil {
 				log.Printf("[Bridge] Failed to delete placeholder: %v", err)
 			}
 		}
+		// Delete response message if it exists
+		if responseMessageID != "" {
+			if err := b.feishuClient.DeleteMessage(responseMessageID); err != nil {
+				log.Printf("[Bridge] Failed to delete response message: %v", err)
+			}
+		}
+		mu.Unlock()
 		return
 	}
 
-	// Send or update message
 	mu.Lock()
 	currentPlaceholder := placeholderID
+	currentResponse := responseMessageID
 	mu.Unlock()
 
-	if currentPlaceholder != "" {
-		// Update existing "thinking..." message
-		if err := b.feishuClient.UpdateMessage(currentPlaceholder, reply); err != nil {
-			log.Printf("[Bridge] Failed to update message, sending new: %v", err)
-			// Fall back to sending new message
-			if _, err := b.feishuClient.SendMessage(chatID, reply); err != nil {
-				log.Printf("[Bridge] Failed to send message: %v", err)
-			}
+	// If we have a response message (from streaming), do final update
+	if currentResponse != "" {
+		if err := b.feishuClient.UpdateMessage(currentResponse, reply); err != nil {
+			log.Printf("[Bridge] Failed to final update message: %v", err)
 		} else {
-			log.Printf("[Bridge] Updated message in %s", chatID)
+			log.Printf("[Bridge] Final updated message in %s", chatID)
+		}
+	} else if currentPlaceholder != "" {
+		// No streaming happened, delete placeholder and send new message
+		if err := b.feishuClient.DeleteMessage(currentPlaceholder); err != nil {
+			log.Printf("[Bridge] Failed to delete placeholder: %v", err)
+		}
+		
+		if _, err := b.feishuClient.SendMessage(chatID, reply); err != nil {
+			log.Printf("[Bridge] Failed to send message: %v", err)
+		} else {
+			log.Printf("[Bridge] Sent new message to %s", chatID)
 		}
 	} else {
-		// Send new message
+		// No placeholder, send new message
 		if _, err := b.feishuClient.SendMessage(chatID, reply); err != nil {
 			log.Printf("[Bridge] Failed to send message: %v", err)
 		} else {
